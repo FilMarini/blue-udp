@@ -51,13 +51,13 @@ module mkUdpIpStreamForICrcGen#(
         let dataStream = dataStreamIn.first;
         dataStreamIn.deq;
         if (isFirstReg) begin
-            let swappedData = swapEndian(dataStream.data);
-            BTH bth = unpack(truncateLSB(swappedData));
-            bth.fecn = setAllBits;
-            bth.becn = setAllBits;
-            bth.resv6 = setAllBits;
-            Data maskedData = {pack(bth), truncate(swappedData)};
-            dataStream.data = swapEndian(maskedData);
+           let swappedData = swapEndian(dataStream.data);
+           BTH bth = unpack(truncateLSB(swappedData));
+           bth.fecn = setAllBits;
+           bth.becn = setAllBits;
+           bth.resv6 = setAllBits;
+           Data maskedData = {pack(bth), truncate(swappedData)};
+           dataStream.data = swapEndian(maskedData);
         end
         dataStreamBuf.enq(dataStream);
         isFirstReg <= dataStream.isLast;
@@ -118,6 +118,8 @@ module mkUdpIpStreamForRdma#(
     rule forkDataStreamIn;
         let dataStream = dataStreamIn.first;
         dataStreamIn.deq;
+        let swappedData = swapEndian(dataStream.data);
+        dataStream.data = swappedData;
         dataStreamBuf.enq(dataStream);
         dataStreamCrcBuf.enq(dataStream);
     endrule
