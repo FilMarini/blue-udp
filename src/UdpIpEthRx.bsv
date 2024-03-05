@@ -27,7 +27,7 @@ endinterface
 
 module mkGenericUdpIpEthRx#(Bool isSupportRdma)(UdpIpEthRx);
     FIFOF#(AxiStream256) axiStreamInBuf <- mkFIFOF;
-    
+    FIFOF#(DataStream) dataStreamSwapBuf <- mkFIFOF;
     Reg#(Maybe#(UdpConfig)) udpConfigReg <- mkReg(Invalid);
     let udpConfigVal = fromMaybe(?, udpConfigReg);
 
@@ -55,21 +55,32 @@ module mkGenericUdpIpEthRx#(Bool isSupportRdma)(UdpIpEthRx);
         );
     end
 
-    interface Put udpConfig;
-        method Action put(UdpConfig conf);
-            udpConfigReg <= tagged Valid conf;
-        endmethod
-    endinterface
+   rule swapDataOut;
+      let dataStreamSwap = udpIpMetaAndDataStream.dataStreamOut.first;
+      udpIpMetaAndDataStream.dataStreamOut.deq;
+      let swappedData = swapEndian(dataStreamSwap.data);
+      let swappedByteEn = swapEndian(dataStreamSwap.byteEn);
+      dataStreamSwap.data = swappedData;
+      dataStreamSwap.byteEn = swappedByteEn;
+      dataStreamSwapBuf.enq(dataStreamSwap);
+   endrule
 
-    interface Put axiStreamIn;
-        method Action put(AxiStream256 stream) if (isValid(udpConfigReg));
-            axiStreamInBuf.enq(stream);
-        endmethod
-    endinterface
+   interface Put udpConfig;
+      method Action put(UdpConfig conf);
+         udpConfigReg <= tagged Valid conf;
+      endmethod
+   endinterface
 
-    interface PipeOut macMetaDataOut = macMetaAndUdpIpStream.macMetaDataOut;
-    interface PipeOut udpIpMetaDataOut = udpIpMetaAndDataStream.udpIpMetaDataOut;
-    interface PipeOut dataStreamOut = udpIpMetaAndDataStream.dataStreamOut;
+   interface Put axiStreamIn;
+      method Action put(AxiStream256 stream) if (isValid(udpConfigReg));
+         axiStreamInBuf.enq(stream);
+      endmethod
+   endinterface
+
+   interface PipeOut macMetaDataOut = macMetaAndUdpIpStream.macMetaDataOut;
+   interface PipeOut udpIpMetaDataOut = udpIpMetaAndDataStream.udpIpMetaDataOut;
+   //interface PipeOut dataStreamOut = udpIpMetaAndDataStream.dataStreamOut;
+   interface PipeOut dataStreamOut = convertFifoToPipeOut(dataStreamSwapBuf);
 endmodule
 
 
