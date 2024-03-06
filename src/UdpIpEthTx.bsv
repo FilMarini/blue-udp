@@ -60,6 +60,9 @@ module mkGenericUdpIpEthTx#(Bool isSupportRdma)(UdpIpEthTx);
 
     interface Put udpIpMetaDataIn;
         method Action put(UdpIpMetaData udpIpMeta) if (isValid(udpConfigReg));
+            if (udpIpMetaDataInBuf.notEmpty) begin
+               udpIpMetaDataInBuf.deq;
+            end
             udpIpMetaDataInBuf.enq(udpIpMeta);
         endmethod
     endinterface
@@ -72,6 +75,9 @@ module mkGenericUdpIpEthTx#(Bool isSupportRdma)(UdpIpEthTx);
 
     interface Put macMetaDataIn;
         method Action put(MacMetaData macMeta) if (isValid(udpConfigReg));
+            if (macMetaDataInBuf.notEmpty) begin
+               macMetaDataInBuf.deq;
+            end
             macMetaDataInBuf.enq(macMeta);
         endmethod
     endinterface
