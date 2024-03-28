@@ -27,6 +27,7 @@ endinterface
 
 module mkGenericUdpIpEthRx#(Bool isSupportRdma)(UdpIpEthRx);
     FIFOF#(AxiStream256) axiStreamInBuf <- mkFIFOF;
+    FIFOF#(DataStream) dataStreamSwapBuf <- mkFIFOF;
     
     Reg#(Maybe#(UdpConfig)) udpConfigReg <- mkReg(Invalid);
     let udpConfigVal = fromMaybe(?, udpConfigReg);
@@ -55,6 +56,16 @@ module mkGenericUdpIpEthRx#(Bool isSupportRdma)(UdpIpEthRx);
         );
     end
 
+   rule swapDataOut;
+      let dataStreamSwap = udpIpMetaAndDataStream.dataStreamOut.first;
+      udpIpMetaAndDataStream.dataStreamOut.deq;
+      let swappedData = swapEndian(dataStreamSwap.data);
+      let swappedByteEn = swapEndian(dataStreamSwap.byteEn);
+      dataStreamSwap.data = swappedData;
+      dataStreamSwap.byteEn = swappedByteEn;
+      dataStreamSwapBuf.enq(dataStreamSwap);
+   endrule
+
     interface Put udpConfig;
         method Action put(UdpConfig conf);
             udpConfigReg <= tagged Valid conf;
@@ -69,7 +80,8 @@ module mkGenericUdpIpEthRx#(Bool isSupportRdma)(UdpIpEthRx);
 
     interface FifoOut macMetaDataOut = macMetaAndUdpIpStream.macMetaDataOut;
     interface FifoOut udpIpMetaDataOut = udpIpMetaAndDataStream.udpIpMetaDataOut;
-    interface FifoOut dataStreamOut = udpIpMetaAndDataStream.dataStreamOut;
+    //interface FifoOut dataStreamOut = udpIpMetaAndDataStream.dataStreamOut;
+    interface FifoOut dataStreamOut = convertFifoToFifoOut(dataStreamSwapBuf);
 endmodule
 
 
