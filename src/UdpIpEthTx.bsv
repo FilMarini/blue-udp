@@ -70,7 +70,9 @@ module mkGenericUdpIpEthTx#(Bool isSupportRdma)(UdpIpEthTx);
     interface Put dataStreamIn;
         method Action put(DataStream stream) if (isValid(udpConfigReg));
             let swappedData = swapEndian(stream.data);
+            let swappedByteEn = reverseBits(stream.byteEn);
             stream.data = swappedData;
+            stream.byteEn = swappedByteEn;
             dataStreamInBuf.enq(stream);
         endmethod
     endinterface
