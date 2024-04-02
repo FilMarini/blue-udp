@@ -9,6 +9,7 @@ import EthernetTypes :: *;
 import StreamHandler :: *;
 import PortConversion :: *;
 import UdpIpLayerForRdma :: *;
+import UdpIpEthTxLenByPass :: *;
 
 import SemiFifo :: *;
 import AxiStreamTypes :: *;
@@ -23,24 +24,32 @@ endinterface
 
 module mkGenericUdpIpEthTx#(Bool isSupportRdma)(UdpIpEthTx);
     FIFOF#(   DataStream) dataStreamInBuf <- mkFIFOF;
+    FIFOF#(   DataStream) dataStreamOneBuf <- mkFIFOF;
+    FIFOF#(   DataStream) dataStreamTwoBuf <- mkFIFOF;
     FIFOF#(UdpIpMetaData) udpIpMetaDataInBuf <- mkFIFOF;
     FIFOF#(  MacMetaData) macMetaDataInBuf <- mkFIFOF;
     
     Reg#(Maybe#(UdpConfig)) udpConfigReg <- mkReg(Invalid);
+
+   let udpTxLen <- mkUdpIpEthTxLenByPass(
+      convertFifoToFifoOut(dataStreamOneBuf),
+      convertFifoToFifoOut(udpIpMetaDataInBuf)
+      );
+
     let udpConfigVal = fromMaybe(?, udpConfigReg);
     
     DataStreamFifoOut udpIpStream = ?;
     if (isSupportRdma) begin
         udpIpStream <- mkUdpIpStreamForRdma(
-            convertFifoToFifoOut(udpIpMetaDataInBuf),
-            convertFifoToFifoOut(dataStreamInBuf),
+            udpTxLen.udpIpMetaDataOut,
+            convertFifoToFifoOut(dataStreamTwoBuf),
             udpConfigVal
         );
     end
     else begin
         udpIpStream <- mkUdpIpStream(
             udpConfigVal,
-            convertFifoToFifoOut(dataStreamInBuf),
+            convertFifoToFifoOut(dataStreamTwoBuf),
             convertFifoToFifoOut(udpIpMetaDataInBuf),
             genUdpIpHeader
         );
@@ -51,6 +60,17 @@ module mkGenericUdpIpEthTx#(Bool isSupportRdma)(UdpIpEthTx);
         convertFifoToFifoOut(macMetaDataInBuf), 
         udpConfigVal
     );
+
+    rule forkDataStreamIn;
+        let dataStream = dataStreamInBuf.first;
+        dataStreamInBuf.deq;
+        dataStreamOneBuf.enq(dataStream);
+        let swappedData = swapEndian(dataStream.data);
+        let swappedByteEn = reverseBits(dataStream.byteEn);
+        dataStream.data = swappedData;
+        dataStream.byteEn = swappedByteEn;
+        dataStreamTwoBuf.enq(dataStream);
+    endrule
 
     interface Put udpConfig;
         method Action put(UdpConfig conf);
@@ -69,10 +89,6 @@ module mkGenericUdpIpEthTx#(Bool isSupportRdma)(UdpIpEthTx);
 
     interface Put dataStreamIn;
         method Action put(DataStream stream) if (isValid(udpConfigReg));
-            let swappedData = swapEndian(stream.data);
-            let swappedByteEn = reverseBits(stream.byteEn);
-            stream.data = swappedData;
-            stream.byteEn = swappedByteEn;
             dataStreamInBuf.enq(stream);
         endmethod
     endinterface

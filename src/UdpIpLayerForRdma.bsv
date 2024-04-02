@@ -108,7 +108,7 @@ module mkUdpIpStreamForRdma#(
 
     rule forkUdpIpMetaDataIn;
         let udpIpMetaData = udpIpMetaDataIn.first;
-        //udpIpMetaDataIn.deq;
+        udpIpMetaDataIn.deq;
         udpIpMetaDataBuf.enq(udpIpMetaData);
         udpIpMetaDataCrcBuf.enq(udpIpMetaData);
         let dataStreamLen = udpIpMetaData.dataLen +
