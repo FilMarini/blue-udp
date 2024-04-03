@@ -85,8 +85,8 @@ module mkUdpIpEthTxLenByPass#(
       dataStreamPipeIn.deq;
       if (dataStream.isFirst) begin
          let {transType, rdmaOpCode} = extractTranTypeAndRdmaOpCode(dataStream.data);
-         $display("UDP TransType: ", fshow(transType));
-         $display("UDP RDMA OpCode: ", fshow(rdmaOpCode));
+         // $display("UDP TransType: ", fshow(transType));
+         // $display("UDP RDMA OpCode: ", fshow(rdmaOpCode));
 
          let udpMetaData = udpIpMetaDataPipeIn.first;
          UdpLengthInt currLen = unpack(udpMetaData.dataLen);
@@ -95,15 +95,15 @@ module mkUdpIpEthTxLenByPass#(
             case (rdmaOpCode)
                RDMA_WRITE_ONLY: newLen = currLen + 28;
                RDMA_WRITE_LAST: newLen = currLen + 12;
-               RDMA_WRITE_FIRST: newLen = 280;
-               RDMA_WRITE_MIDDLE: newLen = 280;
+               RDMA_WRITE_FIRST: newLen = 284;
+               RDMA_WRITE_MIDDLE: newLen = 268;
                default: newLen = currLen;
             endcase
          end else begin
-                     newLen = currLen;
-                  end
+            newLen = currLen;
+         end
          udpMetaData.dataLen = pack(newLen);
-         $display("UDP RDMA Len: ", fshow(newLen));
+         // $display("UDP RDMA Len: ", fshow(newLen));
          udpIpMetaDataOutBuf.enq(udpMetaData);
          end
    endrule
