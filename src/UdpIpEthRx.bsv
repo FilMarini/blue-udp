@@ -60,7 +60,7 @@ module mkGenericUdpIpEthRx#(Bool isSupportRdma)(UdpIpEthRx);
       let dataStreamSwap = udpIpMetaAndDataStream.dataStreamOut.first;
       udpIpMetaAndDataStream.dataStreamOut.deq;
       let swappedData = swapEndian(dataStreamSwap.data);
-      let swappedByteEn = swapEndian(dataStreamSwap.byteEn);
+      let swappedByteEn = reverseBits(dataStreamSwap.byteEn);
       dataStreamSwap.data = swappedData;
       dataStreamSwap.byteEn = swappedByteEn;
       dataStreamSwapBuf.enq(dataStreamSwap);
