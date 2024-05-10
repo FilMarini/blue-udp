@@ -15,6 +15,7 @@ import StreamHandler :: *;
 import PortConversion :: *;
 import UdpIpLayerForRdma :: *;
 //import XilinxCmacRxTxWrapper :: *;
+import UdpIpEthTxLenByPass :: *;
 
 import SemiFifo :: *;
 import AxiStreamTypes :: *;
@@ -45,6 +46,7 @@ module mkGenericUdpIpArpEthRxTx#(Bool isSupportRdma)(UdpIpArpEthRxTx);
 
     // buffer of input ports
     FIFOF#(UdpIpMetaData) udpMetaDataTxBuf <- mkSizedFIFOF(valueOf(CACHE_CBUF_SIZE));
+    FIFOF#(UdpIpMetaData) udpMetaDataTwoTxBuf <- mkSizedFIFOF(valueOf(CACHE_CBUF_SIZE));
     FIFOF#(UdpIpMetaData) arpMetaDataTxBuf <- mkFIFOF;
     FIFOF#(DataStream)  dataStreamTxInBuf <- mkFIFOF;
     FIFOF#(AxiStream256)   axiStreamRxInBuf <- mkFIFOF;
@@ -53,11 +55,14 @@ module mkGenericUdpIpArpEthRxTx#(Bool isSupportRdma)(UdpIpArpEthRxTx);
     Reg#(MuxState) muxState <- mkReg(INIT);
     FIFOF#(DataStream) macPayloadTxBuf <- mkFIFOF;
     FIFOF#(MacMetaData) macMetaDataTxBuf <- mkFIFOF;
+    FIFOF#(DataStream) dataStreamOneBuf <- mkFIFOF;
+    FIFOF#(DataStream) dataStreamTwoBuf <- mkFIFOF;
 
     // state elements of Rx datapath
     Reg#(DemuxState) demuxState <- mkReg(INIT); 
     FIFOF#(DataStream) ipUdpStreamRxBuf <- mkFIFOF;
     FIFOF#(DataStream) arpStreamRxBuf <- mkFIFOF;
+    FIFOF#(DataStream) dataStreamSwapBuf <- mkFIFOF;
 
     // Arp Processor
     ArpProcessor arpProcessor <- mkArpProcessor(
@@ -66,22 +71,45 @@ module mkGenericUdpIpArpEthRxTx#(Bool isSupportRdma)(UdpIpArpEthRxTx);
     );
 
     // Tx datapath
+   let udpTxLen <- mkUdpIpEthTxLenByPass(
+      convertFifoToFifoOut(dataStreamOneBuf),
+      convertFifoToFifoOut(udpMetaDataTxBuf)
+      );
+   
+   rule forkUdpMetaData;
+      let metaData = udpTxLen.udpIpMetaDataOut.first;
+      udpTxLen.udpIpMetaDataOut.deq;
+      udpMetaDataTwoTxBuf.enq(metaData);
+      arpMetaDataTxBuf.enq(metaData);
+   endrule
+
     DataStreamFifoOut udpIpStreamTx = ?;
     if (isSupportRdma) begin
         udpIpStreamTx <- mkUdpIpStreamForRdma(
-            convertFifoToFifoOut(udpMetaDataTxBuf),
-            convertFifoToFifoOut(dataStreamTxInBuf),
+            convertFifoToFifoOut(udpMetaDataTwoTxBuf),
+            convertFifoToFifoOut(dataStreamTwoBuf),
             udpConfigVal
         );
     end
     else begin
         udpIpStreamTx <- mkUdpIpStream(
             udpConfigVal,
-            convertFifoToFifoOut(dataStreamTxInBuf),
-            convertFifoToFifoOut(udpMetaDataTxBuf),
+            convertFifoToFifoOut(dataStreamTwoBuf),
+            convertFifoToFifoOut(udpMetaDataTwoTxBuf),
             genUdpIpHeader
         );
     end
+
+   rule forkDataStreamIn;
+      let dataStream = dataStreamTxInBuf.first;
+      dataStreamTxInBuf.deq;
+      dataStreamOneBuf.enq(dataStream);
+      let swappedData = swapEndian(dataStream.data);
+      let swappedByteEn = reverseBits(dataStream.byteEn);
+      dataStream.data = swappedData;
+      dataStream.byteEn = swappedByteEn;
+      dataStreamTwoBuf.enq(dataStream);
+   endrule
 
     rule doMux;
         if (muxState == INIT) begin
@@ -174,6 +202,17 @@ module mkGenericUdpIpArpEthRxTx#(Bool isSupportRdma)(UdpIpArpEthRxTx);
             extractUdpIpMetaData
         );
     end
+   
+   // Swap data
+   rule swapDataOut;
+      let dataStreamSwap = udpIpMetaAndDataStream.dataStreamOut.first;
+      udpIpMetaAndDataStream.dataStreamOut.deq;
+      let swappedData = swapEndian(dataStreamSwap.data);
+      let swappedByteEn = reverseBits(dataStreamSwap.byteEn);
+      dataStreamSwap.data = swappedData;
+      dataStreamSwap.byteEn = swappedByteEn;
+      dataStreamSwapBuf.enq(dataStreamSwap);
+   endrule
 
 
     // Udp Config Interface
@@ -187,10 +226,11 @@ module mkGenericUdpIpArpEthRxTx#(Bool isSupportRdma)(UdpIpArpEthRxTx);
     // Tx interface
     interface Put udpIpMetaDataTxIn;
         method Action put(UdpIpMetaData meta) if (isValid(udpConfigReg));
+           if (udpMetaDataTxBuf.notEmpty) begin
+              udpMetaDataTxBuf.deq;
+           end
             // generate ip packet
             udpMetaDataTxBuf.enq(meta);
-            // mac address resolution request
-            arpMetaDataTxBuf.enq(meta);
         endmethod
     endinterface
     interface Put dataStreamTxIn;
@@ -207,7 +247,8 @@ module mkGenericUdpIpArpEthRxTx#(Bool isSupportRdma)(UdpIpArpEthRxTx);
         endmethod
     endinterface
     interface FifoOut udpIpMetaDataRxOut = udpIpMetaAndDataStream.udpIpMetaDataOut;
-    interface FifoOut dataStreamRxOut  = udpIpMetaAndDataStream.dataStreamOut;
+    //interface FifoOut dataStreamRxOut  = udpIpMetaAndDataStream.dataStreamOut;
+    interface FifoOut dataStreamRxOut  = convertFifoToFifoOut(dataStreamSwapBuf);
 endmodule
 
 
