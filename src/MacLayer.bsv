@@ -16,8 +16,8 @@ module mkMacStream#(
     FIFOF#(EthHeader) ethHeaderBuf <- mkFIFOF;
     
     rule genEthHeader;
-        //let macMeta = macMetaDataIn.first; macMetaDataIn.deq;
-        let macMeta = macMetaDataIn.first;
+        let macMeta = macMetaDataIn.first; macMetaDataIn.deq;
+        //let macMeta = macMetaDataIn.first;
         let ethHeader = EthHeader{
             dstMacAddr: macMeta.macAddr,
             srcMacAddr: udpConfig.macAddr,
