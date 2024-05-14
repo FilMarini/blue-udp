@@ -67,7 +67,7 @@ typedef 5  IP_IHL_VAL;             // IHL = 0x5
 typedef 0  IP_DS_VAL;              // DS  = 0x0
 typedef 0  IP_DSCP_VAL;
 typedef 0  IP_ECN_VAL;
-typedef 0  IP_FLAGS_VAL;           // FLAGS = 0x0
+typedef 2  IP_FLAGS_VAL;           // FLAGS = 0x2
 typedef 0  IP_OFFSET_VAL;          // FRAGMENT_OFFSET = 0
 typedef 64 IP_TTL_VAL;             // TTL = 0x40
 typedef 17 IP_PROTOCOL_UDP;        // PROTOCOL = 0x11(UDP)
